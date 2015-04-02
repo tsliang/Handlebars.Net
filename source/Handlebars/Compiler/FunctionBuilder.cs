@@ -2,7 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
-using HandlebarsDotNet.Compiler.Lexer;
+using Handlebars.Compiler;
 using System.Linq.Expressions;
 
 namespace HandlebarsDotNet.Compiler

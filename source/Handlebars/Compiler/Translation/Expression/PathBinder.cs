@@ -5,11 +5,12 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.IO;
 using System.Dynamic;
-using Microsoft.CSharp.RuntimeBinder;
+using HandlebarsDotNet;
+using HandlebarsDotNet.Compiler;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace HandlebarsDotNet.Compiler
+namespace Handlebars.Compiler
 {
     internal class PathBinder : HandlebarsExpressionVisitor
     {
@@ -143,38 +144,11 @@ namespace HandlebarsDotNet.Compiler
             }
         }
 
-        private static readonly Regex IndexRegex = new Regex(@"^\[?(?<index>\d+)\]?$", RegexOptions.Compiled);
-
         private object AccessMember(object instance, string memberName)
         {
-            var enumerable = instance as IEnumerable<object>;
-            if (enumerable != null)
-            {
-                int index = 0;
-                var match = IndexRegex.Match(memberName);
-                if (match.Success == true)
-                {
-                    if (match.Groups["index"].Success == false || int.TryParse(match.Groups["index"].Value, out index) == false)
-                    {
-                        throw new HandlebarsRuntimeException("Invalid array index in path");
-                    }
-                    else
-                    {
-                        try
-                        {
-                            return enumerable.ElementAt(index);
-                        }
-                        catch(ArgumentOutOfRangeException)
-                        {
-                            throw new HandlebarsRuntimeException("Array index in path was larger than array provided");
-                        }
-                    }
-                }
-            }
             var resolvedMemberName = this.ResolveMemberName(memberName);
-            var instanceType = instance.GetType();
             //crude handling for dynamic objects that don't have metadata
-            if (typeof(IDynamicMetaObjectProvider).IsAssignableFrom(instanceType))
+            if (instance is IDynamicMetaObjectProvider)
             {
                 try
                 {
@@ -185,6 +159,8 @@ namespace HandlebarsDotNet.Compiler
                     throw new HandlebarsRuntimeException("Could not resolve dynamic member name", ex);
                 }
             }
+
+            var instanceType = instance.GetType();
             if (instance is IDictionary)
             {
                 return ((IDictionary)instance)[resolvedMemberName];
@@ -200,13 +176,23 @@ namespace HandlebarsDotNet.Compiler
             {
                 throw new InvalidOperationException("Template referenced property name that does not exist.");
             }
-            if (members[0].MemberType == System.Reflection.MemberTypes.Property)
+            if (members[0].MemberType == MemberTypes.Property)
             {
                 return ((PropertyInfo)members[0]).GetValue(instance, null);
             }
-            else if (members[0].MemberType == System.Reflection.MemberTypes.Field)
+            if (members[0].MemberType == MemberTypes.Field)
             {
                 return ((FieldInfo)members[0]).GetValue(instance);
+            }
+            var enumerable = instance as IEnumerable<object>;
+            if (enumerable != null) {
+                var index = 0;
+                var indexRegex = new Regex(@"^\[?(\d+)\]?$");
+                var match = indexRegex.Match(memberName);
+                if (!match.Success || match.Groups.Count < 2 || !int.TryParse(match.Groups[1].Value, out index)) {
+                    throw new HandlebarsRuntimeException("Invalid array index in path.");
+                }
+                return enumerable.ElementAt(index);
             }
             throw new InvalidOperationException("Requested member was not a field or property");
         }
